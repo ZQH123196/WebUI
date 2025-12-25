@@ -44,6 +44,10 @@ onMounted(() => {
             itemSelector: '.grid-slot',
             draggingClass: 'slot-dragging',
             targetClass: 'slot-target',
+            canDrag: (index) => {
+                // 只有当格子里有东西时，才允许拖拽
+                return !!gridItems.value[index].name;
+            },
             onSwap: (oldIdx, newIdx) => {
                 const arr = [...gridItems.value];
                 [arr[oldIdx], arr[newIdx]] = [arr[newIdx], arr[oldIdx]];
@@ -261,5 +265,17 @@ pre {
     margin: 0;
     color: #00ff00;
     font-size: 0.85rem;
+}
+
+/* 镜像元素样式 (跟随鼠标的那个) */
+:global(.dnd-mirror) {
+    pointer-events: none !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 215, 0, 0.4);
+    transform: scale(1.05);
+    /* 稍微放大一点增加质感 */
+    background: #252525 !important;
+    border-color: gold !important;
+    opacity: 0.9 !important;
+    z-index: 9999 !important;
 }
 </style>
