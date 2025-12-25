@@ -1,0 +1,69 @@
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.9);
+  background-color: transparent;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Premium Game UI Colors */
+  --color-bg-dark: #0a0a0a;
+  --color-bg-panel: rgba(30, 30, 40, 0.85);
+  /* Glassmorphism base */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-primary: #ffd700;
+  /* Gold */
+  --color-accent: #00bcd4;
+  /* Cyan */
+  --color-slot-bg: rgba(0, 0, 0, 0.5);
+  --color-slot-hover: rgba(255, 255, 255, 0.1);
+  --color-rarity-common: #b0b0b0;
+  --color-rarity-rare: #3e87e3;
+  --color-rarity-epic: #a335ee;
+  --color-rarity-legendary: #ff8000;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  justify-content: center;
+  min-width: 320px;
+  min-height: 100vh;
+  background: transparent;
+  overflow: hidden;
+  /* Prevent scrollbars in game UI */
+}
+
+#app {
+  width: 100%;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+/* Scrollbar styling for any scrolling elements */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        /* 关键：让网页背景透明 */
+        html,
+        body {
+            background-color: transparent;
+            /* 为了测试，去掉默认的白色背景 */
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            /* 防止滚动条出现 */
+        }
+
+        /* 为了证明网页在运行，加一个浮动的测试块 */
+        .test-box {
+            width: 300px;
+            height: 200px;
+            background-color: rgba(255, 0, 0, 0.5);
+            /* 半透明红色 */
+            color: white;
+            font-size: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid white;
+            margin: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="test-box">
+        我是网页内容<br>
+        背景应该是透明的
+    </div>
+</body>
+
+</html>
