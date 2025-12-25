@@ -2,29 +2,88 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { MyTsDnD } from '../lib/MyTsDnD';
 
-// --- 1. List 测试 ---
+// --- Shared List 测试 ---
+const groupA = ref([
+    { id: 10, text: '物品 A-1' },
+    { id: 11, text: '物品 A-2' },
+    { id: 12, text: '物品 A-3' }
+]);
+
+const groupB = ref([
+    { id: 20, text: '物品 B-1' },
+    { id: 21, text: '物品 B-2' }
+]);
+
+const refA = ref<HTMLElement | null>(null);
+const refB = ref<HTMLElement | null>(null);
+let dndA: MyTsDnD | null = null;
+let dndB: MyTsDnD | null = null;
+
+// --- List 测试 ---
 const list = ref([
     { id: 1, text: '勇者之剑', color: '#ff4444' },
     { id: 2, text: '魔导书籍', color: '#4444ff' },
     { id: 3, text: '治愈药水', color: '#44ff44' }
 ]);
-
 const listRef = ref<HTMLElement | null>(null);
 let listDnD: MyTsDnD | null = null;
 
-// --- 2. Grid 测试 (模拟背包) ---
+// --- Grid 测试 ---
 const icons = ['⚔️', '🛡️', '🧪', '📜', '💎', '🏹', '🎩', '🍎', '🪙', '🔑'];
 const gridItems = ref(Array.from({ length: 15 }, (_, i) => ({
     id: i + 100,
     name: i < 10 ? `Item ${i + 1}` : null,
     icon: i < 10 ? icons[i] : ''
 })));
-
 const gridRef = ref<HTMLElement | null>(null);
 let gridDnD: MyTsDnD | null = null;
 
 onMounted(() => {
-    // 初始化 List 拖拽
+    // Shared List A
+    if (refA.value) {
+        dndA = new MyTsDnD(refA.value, {
+            itemSelector: '.shared-item',
+            group: 'shared-group',
+            draggingClass: 'item-dragging',
+            targetClass: 'item-target',
+            onSwap: (oldIdx, newIdx) => {
+                const arr = [...groupA.value];
+                [arr[oldIdx], arr[newIdx]] = [arr[newIdx], arr[oldIdx]];
+                groupA.value = arr;
+            },
+            onAdd: (oldIdx, newIdx, fromContainer) => {
+                // 如果是从 B 拖过来的
+                if (fromContainer === refB.value) {
+                    const item = groupB.value.splice(oldIdx, 1)[0];
+                    groupA.value.splice(newIdx, 0, item);
+                }
+            }
+        });
+    }
+
+    // Shared List B
+    if (refB.value) {
+        dndB = new MyTsDnD(refB.value, {
+            itemSelector: '.shared-item',
+            group: 'shared-group',
+            draggingClass: 'item-dragging',
+            targetClass: 'item-target',
+            onSwap: (oldIdx, newIdx) => {
+                const arr = [...groupB.value];
+                [arr[oldIdx], arr[newIdx]] = [arr[newIdx], arr[oldIdx]];
+                groupB.value = arr;
+            },
+            onAdd: (oldIdx, newIdx, fromContainer) => {
+                // 如果是从 A 拖过来的
+                if (fromContainer === refA.value) {
+                    const item = groupA.value.splice(oldIdx, 1)[0];
+                    groupB.value.splice(newIdx, 0, item);
+                }
+            }
+        });
+    }
+
+    // List
     if (listRef.value) {
         listDnD = new MyTsDnD(listRef.value, {
             itemSelector: '.dnd-item',
@@ -38,27 +97,25 @@ onMounted(() => {
         });
     }
 
-    // 初始化 Grid 拖拽
+    // Grid
     if (gridRef.value) {
         gridDnD = new MyTsDnD(gridRef.value, {
             itemSelector: '.grid-slot',
             draggingClass: 'slot-dragging',
             targetClass: 'slot-target',
-            canDrag: (index) => {
-                // 只有当格子里有东西时，才允许拖拽
-                return !!gridItems.value[index].name;
-            },
+            canDrag: (index) => !!gridItems.value[index].name,
             onSwap: (oldIdx, newIdx) => {
                 const arr = [...gridItems.value];
                 [arr[oldIdx], arr[newIdx]] = [arr[newIdx], arr[oldIdx]];
                 gridItems.value = arr;
-                console.log(`Grid Swap: ${oldIdx} <-> ${newIdx}`);
             }
         });
     }
 });
 
 onUnmounted(() => {
+    dndA?.destroy();
+    dndB?.destroy();
     listDnD?.destroy();
     gridDnD?.destroy();
 });
@@ -66,50 +123,55 @@ onUnmounted(() => {
 
 <template>
     <div class="test-container">
-        <header>
-            <h1>MyTsDnD Library Test</h1>
-            <p>Testing List and Grid layouts with <strong>Delayed Swap (on MouseUp)</strong></p>
-        </header>
+        <h1>MyTsDnD Advanced Test</h1>
 
-        <div class="test-sections">
-            <!-- List Section -->
-            <section class="test-section">
-                <h2>List Layout</h2>
-                <div ref="listRef" class="dnd-list">
-                    <div v-for="item in list" :key="item.id" class="dnd-item" :style="{ borderLeftColor: item.color }">
-                        <span class="handle">⠿</span>
-                        <span class="text">{{ item.text }}</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Grid Section -->
-            <section class="test-section">
-                <h2>Grid Layout (5x3 Inventory)</h2>
-                <div ref="gridRef" class="dnd-grid">
-                    <div v-for="(slot, index) in gridItems" :key="slot.id" class="grid-slot" :data-index="index">
-                        <div v-if="slot.name" class="slot-content">
-                            <span class="icon">{{ slot.icon }}</span>
-                            <span class="badge">{{ index }}</span>
+        <!-- 1. Shared List Test -->
+        <section class="test-section">
+            <h2>Shared List Layout (跨容器拖拽)</h2>
+            <div class="shared-container">
+                <div class="column">
+                    <h3>Group A</h3>
+                    <div ref="refA" class="shared-list">
+                        <div v-for="item in groupA" :key="item.id" class="shared-item">
+                            {{ item.text }}
                         </div>
                     </div>
                 </div>
-                <p class="hint">注：拖拽到目标位置后<strong>松开鼠标</strong>执行交换</p>
+                <div class="column">
+                    <h3>Group B</h3>
+                    <div ref="refB" class="shared-list">
+                        <div v-for="item in groupB" :key="item.id" class="shared-item">
+                            {{ item.text }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="test-sections">
+            <!-- 2. List Layout -->
+            <section class="test-section">
+                <h2>List Layout (单容器)</h2>
+                <div ref="listRef" class="dnd-list">
+                    <div v-for="item in list" :key="item.id" class="dnd-item" :style="{ borderLeftColor: item.color }">
+                        <span class="handle">⠿</span>
+                        {{ item.text }}
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Grid Layout -->
+            <section class="test-section">
+                <h2>Grid Layout (背包模拟)</h2>
+                <div ref="gridRef" class="dnd-grid">
+                    <div v-for="(slot, index) in gridItems" :key="slot.id" class="grid-slot" :data-index="index">
+                        <div v-if="slot.name" class="slot-content">
+                            <span>{{ slot.icon }}</span>
+                        </div>
+                    </div>
+                </div>
             </section>
         </div>
-
-        <section class="code-preview">
-            <h3>Usage:</h3>
-            <pre>
-// Now supports 'targetClass' for drop-preview
-new MyTsDnD(container, {
-  itemSelector: '.target-item',
-  draggingClass: 'active',
-  targetClass: 'drop-preview',
-  onSwap: (from, to) => { /* logic */ }
-});
-            </pre>
-        </section>
     </div>
 </template>
 
@@ -117,28 +179,22 @@ new MyTsDnD(container, {
 .test-container {
     padding: 40px;
     color: white;
-    max-width: 1000px;
+    max-width: 1200px;
     margin: 0 auto;
     text-align: left;
 }
 
-.test-sections {
-    display: flex;
-    gap: 40px;
-    align-items: flex-start;
-}
-
 .test-section {
-    flex: 1;
     background: rgba(255, 255, 255, 0.05);
     padding: 24px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 30px;
 }
 
 h1 {
     color: #44ff44;
-    margin: 0;
+    margin-bottom: 40px;
 }
 
 h2 {
@@ -146,9 +202,73 @@ h2 {
     font-size: 1.1rem;
     margin-top: 0;
     margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
-/* List Styles */
+h3 {
+    font-size: 0.9rem;
+    color: #888;
+    margin-bottom: 10px;
+}
+
+.test-sections {
+    display: flex;
+    gap: 30px;
+}
+
+/* Shared List Styles */
+.shared-container {
+    display: flex;
+    gap: 20px;
+}
+
+.column {
+    flex: 1;
+}
+
+.shared-list {
+    min-height: 150px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px dashed #444;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.shared-item {
+    background: #2a2a2a;
+    padding: 10px 15px;
+    margin-bottom: 8px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: grab;
+}
+
+.shared-item.drop-target {
+    border-color: gold;
+    background: #333;
+    transform: scale(1.02);
+}
+
+.shared-list.drop-target {
+    border-color: #44ff44;
+    background: rgba(68, 255, 68, 0.05);
+}
+
+/* Common DND Styles */
+.item-dragging {
+    opacity: 0.3 !important;
+}
+
+:global(.dnd-mirror) {
+    pointer-events: none !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    background: #333 !important;
+    border: 1px solid gold !important;
+    z-index: 10000;
+}
+
+/* List/Grid Styles (Reuse) */
 .dnd-list {
     display: flex;
     flex-direction: column;
@@ -156,46 +276,23 @@ h2 {
 }
 
 .dnd-item {
-    display: flex;
-    align-items: center;
     padding: 12px;
     background: #1e1e1e;
     border: 1px solid #333;
     border-left: 4px solid;
     border-radius: 4px;
     cursor: grab;
-    user-select: none;
-    transition: all 0.2s;
 }
 
-.dnd-item.item-dragging {
-    opacity: 0.3;
-    background: #000;
-    transform: scale(0.95);
-    cursor: grabbing;
-}
-
-/* 潜在目标落点样式 */
-.dnd-item.item-target {
-    background: #2a2a2a;
+.item-target {
     border-color: gold;
-    transform: translateX(10px);
-    box-shadow: -5px 0 10px rgba(255, 215, 0, 0.2);
+    transform: translateX(5px);
 }
 
-.handle {
-    margin-right: 12px;
-    color: #666;
-}
-
-/* Grid Styles */
 .dnd-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 10px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 10px;
-    border-radius: 8px;
 }
 
 .grid-slot {
@@ -203,14 +300,7 @@ h2 {
     background: #151515;
     border: 1px solid #333;
     border-radius: 4px;
-    position: relative;
     cursor: grab;
-    transition: all 0.2s;
-}
-
-.grid-slot:hover {
-    border-color: #555;
-    background: #1c1c1c;
 }
 
 .slot-content {
@@ -221,61 +311,10 @@ h2 {
     align-items: center;
     font-size: 1.5rem;
     pointer-events: none;
-    /* 关键：防止元素内部内容干扰落点探测 */
 }
 
-.badge {
-    position: absolute;
-    bottom: 2px;
-    right: 4px;
-    font-size: 10px;
-    color: #444;
-    font-family: monospace;
-}
-
-.grid-slot.slot-dragging {
-    opacity: 0.3;
-    border-color: #555;
-    background: #000;
-}
-
-/* 网格潜在落点样式 */
-.grid-slot.slot-target {
+.slot-target {
     border-color: gold;
-    background: rgba(255, 215, 0, 0.15);
-    box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
-    z-index: 10;
-}
-
-.hint {
-    margin-top: 15px;
-    font-size: 0.8rem;
-    color: rgba(255, 215, 0, 0.5);
-    font-weight: bold;
-}
-
-.code-preview {
-    margin-top: 40px;
-    background: #000;
-    padding: 20px;
-    border-radius: 8px;
-}
-
-pre {
-    margin: 0;
-    color: #00ff00;
-    font-size: 0.85rem;
-}
-
-/* 镜像元素样式 (跟随鼠标的那个) */
-:global(.dnd-mirror) {
-    pointer-events: none !important;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 215, 0, 0.4);
-    transform: scale(1.05);
-    /* 稍微放大一点增加质感 */
-    background: #252525 !important;
-    border-color: gold !important;
-    opacity: 0.9 !important;
-    z-index: 9999 !important;
+    background: rgba(255, 215, 0, 0.1);
 }
 </style>

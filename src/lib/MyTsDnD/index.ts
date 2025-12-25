@@ -12,17 +12,24 @@ export interface MyTsDnDOptions {
     targetClass?: string;
     /** 跟随鼠标移动的镜像元素类名 */
     mirrorClass?: string;
+    /** 分组标识，相同分组的实例可以互相拖拽 */
+    group?: string;
     /** 判定该项是否允许被拖动 */
     canDrag?: (index: number, element: HTMLElement) => boolean;
-    /** 当鼠标松开并确认落点时的回调 */
+    /** 当在同一个容器内交换时的回调 */
     onSwap?: (oldIndex: number, newIndex: number) => void;
+    /** 当项从外部容器移入当前容器时的回调 */
+    onAdd?: (oldIndex: number, newIndex: number, fromContainer: HTMLElement) => void;
 }
 
 export class MyTsDnD {
-    private container: HTMLElement;
+    private static allInstances: MyTsDnD[] = [];
+
+    public container: HTMLElement;
     private options: MyTsDnDOptions;
     private startIdx: number | null = null;
     private lastTargetIdx: number | null = null;
+    private lastTargetInstance: MyTsDnD | null = null;
     private isActive: boolean = false;
     private mirrorEl: HTMLElement | null = null;
 
@@ -35,6 +42,7 @@ export class MyTsDnD {
             ...options
         };
         this.init();
+        MyTsDnD.allInstances.push(this);
     }
 
     private init() {
@@ -46,10 +54,9 @@ export class MyTsDnD {
         const itemElement = target.closest(this.options.itemSelector) as HTMLElement;
 
         if (itemElement && this.container.contains(itemElement)) {
-            // 关键修复：防止浏览器触发原生的图片/文字拖拽行为
             event.preventDefault();
 
-            const items = Array.from(this.container.querySelectorAll(this.options.itemSelector));
+            const items = this.getItems();
             const index = items.indexOf(itemElement);
 
             if (index !== -1) {
@@ -61,20 +68,24 @@ export class MyTsDnD {
         }
     }
 
+    private getItems(): HTMLElement[] {
+        return Array.from(this.container.querySelectorAll(this.options.itemSelector));
+    }
+
     private startDrag(index: number, element: HTMLElement, event: MouseEvent) {
         if (this.isActive) return;
         this.isActive = true;
         this.startIdx = index;
         this.lastTargetIdx = index;
+        this.lastTargetInstance = this;
 
-        // 1. 创建镜像元素 (Ghost/Mirror)
+        // 1. 创建镜像元素
         this.mirrorEl = element.cloneNode(true) as HTMLElement;
         this.mirrorEl.classList.remove(this.options.draggingClass!);
         if (this.options.mirrorClass) {
             this.mirrorEl.classList.add(this.options.mirrorClass);
         }
 
-        // 2. 设置镜像初始样式
         const rect = element.getBoundingClientRect();
         Object.assign(this.mirrorEl.style, {
             position: 'fixed',
@@ -84,14 +95,12 @@ export class MyTsDnD {
             height: `${rect.height}px`,
             pointerEvents: 'none',
             zIndex: '9999',
-            margin: '0',
             opacity: '0.8',
             transition: 'none'
         });
 
         document.body.appendChild(this.mirrorEl);
 
-        // 3. 记录鼠标相对于元素的偏移量
         const offsetX = event.clientX - rect.left;
         const offsetY = event.clientY - rect.top;
 
@@ -102,49 +111,95 @@ export class MyTsDnD {
         const onMouseMove = (e: MouseEvent) => {
             if (this.startIdx === null || !this.mirrorEl) return;
 
-            // 4. 更新镜像位置跟随鼠标
             this.mirrorEl.style.left = `${e.clientX - offsetX}px`;
             this.mirrorEl.style.top = `${e.clientY - offsetY}px`;
 
-            // 5. 探测落点
+            // 搜索落点，支持跨实例搜索（Shared List）
             const hoveredEl = document.elementFromPoint(e.clientX, e.clientY);
-            const targetItem = hoveredEl?.closest(this.options.itemSelector) as HTMLElement;
 
-            this.clearTargetClasses();
+            // 找到包含该元素的实例
+            let targetInstance: MyTsDnD | null = null;
+            let targetItem: HTMLElement | null = null;
 
-            if (targetItem && this.container.contains(targetItem)) {
-                const items = Array.from(this.container.querySelectorAll(this.options.itemSelector));
-                const targetIdx = items.indexOf(targetItem);
+            // 优先检查当前分组
+            const groupInstances = this.options.group
+                ? MyTsDnD.allInstances.filter(inst => inst.options.group === this.options.group)
+                : [this];
 
-                if (targetIdx !== -1) {
-                    this.lastTargetIdx = targetIdx;
-                    if (this.options.targetClass && targetIdx !== this.startIdx) {
-                        targetItem.classList.add(this.options.targetClass);
+            for (const inst of groupInstances) {
+                const item = hoveredEl?.closest(inst.options.itemSelector) as HTMLElement;
+                if (item && inst.container.contains(item)) {
+                    targetInstance = inst;
+                    targetItem = item;
+                    break;
+                }
+                // 允许拖拽到空容器
+                if (hoveredEl && (hoveredEl === inst.container || inst.container.contains(hoveredEl))) {
+                    targetInstance = inst;
+                    break;
+                }
+            }
+
+            // 清理旧的高亮
+            if (this.lastTargetInstance) {
+                this.lastTargetInstance.clearTargetClasses();
+            }
+
+            if (targetInstance) {
+                this.lastTargetInstance = targetInstance;
+                const items = targetInstance.getItems();
+
+                if (targetItem) {
+                    const targetIdx = items.indexOf(targetItem);
+                    if (targetIdx !== -1) {
+                        this.lastTargetIdx = targetIdx;
+                        if (targetInstance.options.targetClass) {
+                            targetItem.classList.add(targetInstance.options.targetClass);
+                        }
+                    }
+                } else {
+                    // 如果命中了容器但没命中具体项，则默认排在最后
+                    this.lastTargetIdx = items.length;
+                    if (targetInstance.options.targetClass) {
+                        targetInstance.container.classList.add(targetInstance.options.targetClass);
                     }
                 }
             } else {
                 this.lastTargetIdx = this.startIdx;
+                this.lastTargetInstance = this;
             }
         };
 
         const stopDrag = () => {
             const finalStartIdx = this.startIdx;
             const finalTargetIdx = this.lastTargetIdx;
+            const finalInstance = this.lastTargetInstance;
 
             this.isActive = false;
             this.startIdx = null;
             this.lastTargetIdx = null;
+            this.lastTargetInstance = null;
 
-            // 6. 销毁镜像
             if (this.mirrorEl) {
                 this.mirrorEl.remove();
                 this.mirrorEl = null;
             }
 
-            this.clearAllClasses();
+            // 清理所有实例的样式
+            MyTsDnD.allInstances.forEach(inst => inst.clearAllClasses());
 
-            if (this.options.onSwap && finalStartIdx !== null && finalTargetIdx !== null && finalStartIdx !== finalTargetIdx) {
-                this.options.onSwap(finalStartIdx, finalTargetIdx);
+            if (finalInstance && finalStartIdx !== null && finalTargetIdx !== null) {
+                if (finalInstance === this) {
+                    // 同容器内部交换
+                    if (finalStartIdx !== finalTargetIdx && finalTargetIdx < this.getItems().length) {
+                        if (this.options.onSwap) this.options.onSwap(finalStartIdx, finalTargetIdx);
+                    }
+                } else {
+                    // 跨容器添加
+                    if (finalInstance.options.onAdd) {
+                        finalInstance.options.onAdd(finalStartIdx, finalTargetIdx, this.container);
+                    }
+                }
             }
 
             window.removeEventListener('mousemove', onMouseMove);
@@ -155,17 +210,20 @@ export class MyTsDnD {
         window.addEventListener('mouseup', stopDrag);
     }
 
-    private clearTargetClasses() {
+    public clearTargetClasses() {
         if (this.options.targetClass) {
+            this.container.classList.remove(this.options.targetClass);
             this.container.querySelectorAll(this.options.itemSelector).forEach(el => {
                 el.classList.remove(this.options.targetClass!);
             });
         }
     }
 
-    private clearAllClasses() {
-        const selector = this.options.itemSelector;
-        this.container.querySelectorAll(selector).forEach(el => {
+    public clearAllClasses() {
+        if (this.options.draggingClass) this.container.classList.remove(this.options.draggingClass);
+        if (this.options.targetClass) this.container.classList.remove(this.options.targetClass);
+
+        this.container.querySelectorAll(this.options.itemSelector).forEach(el => {
             if (this.options.draggingClass) el.classList.remove(this.options.draggingClass!);
             if (this.options.targetClass) el.classList.remove(this.options.targetClass!);
         });
@@ -173,5 +231,6 @@ export class MyTsDnD {
 
     public destroy() {
         this.container.removeEventListener('mousedown', this.handleMouseDown.bind(this));
+        MyTsDnD.allInstances = MyTsDnD.allInstances.filter(inst => inst !== this);
     }
 }
